@@ -1,98 +1,280 @@
-// ============================================================================
-//         PROJETO WAR ESTRUTURADO - DESAFIO DE CÓDIGO
-// ============================================================================
-//        
-// ============================================================================
-//
-// OBJETIVOS:
-// - Modularizar completamente o código em funções especializadas.
-// - Implementar um sistema de missões para um jogador.
-// - Criar uma função para verificar se a missão foi cumprida.
-// - Utilizar passagem por referência (ponteiros) para modificar dados e
-//   passagem por valor/referência constante (const) para apenas ler.
-// - Foco em: Design de software, modularização, const correctness, lógica de jogo.
-//
-// ============================================================================
+/*
+ * WAR ESTRUTURADO — 3 NÍVEIS EM UM ÚNICO ARQUIVO (war.c)
+ * Menu escolhe: 1) Novato  2) Aventureiro  3) Mestre
+ * Comentários focam em estrutura e fluxos.
+ */
 
-// Inclusão das bibliotecas padrão necessárias para entrada/saída, alocação de memória, manipulação de strings e tempo.
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <locale.h>
 
-// --- Constantes Globais ---
-// Definem valores fixos para o número de territórios, missões e tamanho máximo de strings, facilitando a manutenção.
+/* ---------- Configuração comum ---------- */
+#define QTDE_TERRITORIOS 5
+#define TAM_NOME 30
+#define TAM_COR  10
 
-// --- Estrutura de Dados ---
-// Define a estrutura para um território, contendo seu nome, a cor do exército que o domina e o número de tropas.
+typedef struct {
+    char nome[TAM_NOME];
+    char cor[TAM_COR];
+    int  tropas;
+} Territorio;
 
-// --- Protótipos das Funções ---
-// Declarações antecipadas de todas as funções que serão usadas no programa, organizadas por categoria.
-// Funções de setup e gerenciamento de memória:
-// Funções de interface com o usuário:
-// Funções de lógica principal do jogo:
-// Função utilitária:
+/* Utilidades comuns */
+static void strip(char *s){ size_t n=strlen(s); if(n && s[n-1]=='\n') s[n-1]=0; }
+static void limpa_stdin(void){ int c; while((c=getchar())!='\n' && c!=EOF){} }
+static void pausa(void){ puts("\n<Enter> para continuar..."); limpa_stdin(); }
 
-// --- Função Principal (main) ---
-// Função principal que orquestra o fluxo do jogo, chamando as outras funções em ordem.
-int main() {
-    // 1. Configuração Inicial (Setup):
-    // - Define o locale para português.
-    // - Inicializa a semente para geração de números aleatórios com base no tempo atual.
-    // - Aloca a memória para o mapa do mundo e verifica se a alocação foi bem-sucedida.
-    // - Preenche os territórios com seus dados iniciais (tropas, donos, etc.).
-    // - Define a cor do jogador e sorteia sua missão secreta.
+/* ---------- Exibição comum ---------- */
+static void exibirMapa(const Territorio *m, int n){
+    puts("\nMapa Atual");
+    puts("Idx | Territorio          | Cor       | Tropas");
+    puts("----+----------------------+-----------+-------");
+    for(int i=0;i<n;i++)
+        printf("%-3d | %-20s | %-9s | %d\n", i+1, m[i].nome, m[i].cor, m[i].tropas);
+}
 
-    // 2. Laço Principal do Jogo (Game Loop):
-    // - Roda em um loop 'do-while' que continua até o jogador sair (opção 0) ou vencer.
-    // - A cada iteração, exibe o mapa, a missão e o menu de ações.
-    // - Lê a escolha do jogador e usa um 'switch' para chamar a função apropriada:
-    //   - Opção 1: Inicia a fase de ataque.
-    //   - Opção 2: Verifica se a condição de vitória foi alcançada e informa o jogador.
-    //   - Opção 0: Encerra o jogo.
-    // - Pausa a execução para que o jogador possa ler os resultados antes da próxima rodada.
+/* =========================================================
+ * NÍVEL NOVATO
+ * Vetor estático, cadastro e exibição.
+ * ========================================================= */
+static void nivel_novato(void){
+    Territorio mapa[QTDE_TERRITORIOS];
 
-    // 3. Limpeza:
-    // - Ao final do jogo, libera a memória alocada para o mapa para evitar vazamentos de memória.
+    puts("\n=== Nivel Novato ===");
+    for(int i=0;i<QTDE_TERRITORIOS;i++){
+        printf("Territorio #%d\n", i+1);
 
+        printf("Nome do territorio: ");
+        if(!fgets(mapa[i].nome, sizeof(mapa[i].nome), stdin)) return;
+        strip(mapa[i].nome);
+
+        printf("Cor do exercito: ");
+        if(!fgets(mapa[i].cor, sizeof(mapa[i].cor), stdin)) return;
+        strip(mapa[i].cor);
+
+        printf("Numero de tropas: ");
+        while(scanf("%d",&mapa[i].tropas)!=1 || mapa[i].tropas<0){
+            limpa_stdin(); printf("Inteiro >=0: ");
+        }
+        limpa_stdin();
+        puts("------------------------------");
+    }
+
+    exibirMapa(mapa, QTDE_TERRITORIOS);
+    pausa();
+}
+
+/* =========================================================
+ * NÍVEL AVENTUREIRO
+ * calloc + batalha simples 1x1 (empate favorece atacante).
+ * ========================================================= */
+static void simularAtaque_av(Territorio *m, int a, int d){
+    int dadoA=(rand()%6)+1, dadoD=(rand()%6)+1;
+    printf("Dados -> Atacante:%d  Defensor:%d\n", dadoA, dadoD);
+
+    if(dadoA >= dadoD){
+        m[d].tropas -= 1;
+        puts("Atacante venceu. Defensor perde 1 tropa.");
+        if(m[d].tropas <= 0){
+            puts("Territorio conquistado. Transferindo 1 tropa do atacante.");
+            strncpy(m[d].cor, m[a].cor, TAM_COR-1);
+            m[d].tropas = 1;
+            m[a].tropas -= 1;
+        }
+    }else{
+        m[a].tropas -= 1;
+        puts("Defensor venceu. Atacante perde 1 tropa.");
+    }
+}
+
+static void nivel_aventureiro(void){
+    Territorio *mapa = calloc(QTDE_TERRITORIOS, sizeof(Territorio));
+    if(!mapa){ puts("Falha ao alocar memoria."); return; }
+
+    puts("\n=== Nivel Aventureiro ===");
+    for(int i=0;i<QTDE_TERRITORIOS;i++){
+        printf("Territorio #%d\n", i+1);
+
+        printf("Nome do territorio: ");
+        if(!fgets(mapa[i].nome, sizeof(mapa[i].nome), stdin)){ free(mapa); return; }
+        strip(mapa[i].nome);
+
+        printf("Cor do exercito: ");
+        if(!fgets(mapa[i].cor, sizeof(mapa[i].cor), stdin)){ free(mapa); return; }
+        strip(mapa[i].cor);
+
+        printf("Numero de tropas: ");
+        while(scanf("%d",&mapa[i].tropas)!=1 || mapa[i].tropas<0){
+            limpa_stdin(); printf("Inteiro >=0: ");
+        }
+        limpa_stdin();
+        puts("------------------------------");
+    }
+
+    int opc=1;
+    while(opc!=0){
+        exibirMapa(mapa, QTDE_TERRITORIOS);
+        puts("\n1 - Atacar");
+        puts("0 - Sair");
+        printf("Opcao: ");
+        if(scanf("%d",&opc)!=1){ limpa_stdin(); continue; }
+        limpa_stdin();
+        if(opc==1){
+            int a,d;
+            printf("Atacante (1..5): "); if(scanf("%d",&a)!=1){ limpa_stdin(); continue; }
+            printf("Defensor  (1..5): "); if(scanf("%d",&d)!=1){ limpa_stdin(); continue; }
+            limpa_stdin();
+            if(a<1||a>5||d<1||d>5||a==d){ puts("Indices invalidos."); continue; }
+            if(mapa[a-1].tropas<2){ puts("Atacante precisa ter >=2 tropas."); continue; }
+            simularAtaque_av(mapa, a-1, d-1);
+        }
+    }
+    free(mapa);
+}
+
+/* =========================================================
+ * NÍVEL MESTRE
+ * Modularização + missão aleatória + verificação de vitória.
+ * Regras iniciais fixas para demonstrar o fluxo.
+ * ========================================================= */
+enum { MISSAO_DESTRUIR_VERDE=0, MISSAO_CONQUISTAR_3=1 };
+
+static Territorio* alocarMapa(size_t n){ return calloc(n, sizeof(Territorio)); }
+
+static void inicializarTerritorios(Territorio *mapa, size_t n){
+    const char *nomes[QTDE_TERRITORIOS] = {"Alfa","Bravo","Charlie","Delta","Echo"};
+    const char *cores[QTDE_TERRITORIOS] = {"Verde","Vermelho","Azul","Amarelo","Verde"};
+    const int tropas[QTDE_TERRITORIOS]  = {3,3,3,3,3};
+    for(size_t i=0;i<n;i++){
+        strncpy(mapa[i].nome, nomes[i], TAM_NOME-1);
+        strncpy(mapa[i].cor,  cores[i], TAM_COR-1);
+        mapa[i].tropas = tropas[i];
+    }
+}
+
+static void exibirMenuPrincipal(void){
+    puts("\nMenu Principal:");
+    puts("1 - Atacar");
+    puts("2 - Verificar missao");
+    puts("0 - Sair");
+}
+
+static void simularAtaque_mestre(Territorio *m, int ia, int id, const char *corJogador){
+    if(strcmp(m[ia].cor, corJogador)!=0){ puts("Ataque apenas de territorio seu."); return; }
+    if(strcmp(m[id].cor, corJogador)==0){ puts("Nao ataque territorio seu."); return; }
+    if(m[ia].tropas<2){ puts("Atacante precisa >=2 tropas."); return; }
+    if(m[id].tropas<=0){ puts("Defensor vazio."); return; }
+
+    int dadoA=(rand()%6)+1, dadoD=(rand()%6)+1;
+    printf("Dados -> Atacante: %d | Defensor: %d\n", dadoA, dadoD);
+
+    if(dadoA >= dadoD){
+        m[id].tropas -= 1;
+        puts("Atacante venceu a rodada.");
+        if(m[id].tropas<=0){
+            puts("Territorio conquistado.");
+            strncpy(m[id].cor, corJogador, TAM_COR-1);
+            m[id].tropas = 1;
+            m[ia].tropas -= 1;
+        }
+    }else{
+        m[ia].tropas -= 1;
+        puts("Defensor resistiu.");
+    }
+}
+
+static int sortearMissao(void){
+    int pool[2]={MISSAO_DESTRUIR_VERDE, MISSAO_CONQUISTAR_3};
+    return pool[rand()%2];
+}
+
+static void exibirMissao(int missao){
+    puts("\nMissao do Jogador:");
+    if(missao==MISSAO_DESTRUIR_VERDE) puts("- Destruir todos os territorios de cor Verde.");
+    else if(missao==MISSAO_CONQUISTAR_3) puts("- Conquistar 3 territorios.");
+}
+
+static int verificarVitoria(const Territorio *m, size_t n, int missao, const char *corJogador){
+    if(missao==MISSAO_DESTRUIR_VERDE){
+        for(size_t i=0;i<n;i++)
+            if(strcmp(m[i].cor,"Verde")==0 && m[i].tropas>0) return 0;
+        return 1;
+    }else if(missao==MISSAO_CONQUISTAR_3){
+        int cnt=0;
+        for(size_t i=0;i<n;i++)
+            if(strcmp(m[i].cor, corJogador)==0 && m[i].tropas>0) cnt++;
+        return cnt>=3;
+    }
     return 0;
 }
 
-// --- Implementação das Funções ---
+static void faseDeAtaque(Territorio *m, size_t n, const char *corJogador){
+    int a,d;
+    printf("Atacante (1..%zu): ", n); if(scanf("%d",&a)!=1){ limpa_stdin(); return; }
+    printf("Defensor  (1..%zu): ", n); if(scanf("%d",&d)!=1){ limpa_stdin(); return; }
+    limpa_stdin();
+    if(a<1||a>(int)n||d<1||d>(int)n||a==d){ puts("Indices invalidos."); return; }
+    simularAtaque_mestre(m, a-1, d-1, corJogador);
+}
 
-// alocarMapa():
-// Aloca dinamicamente a memória para o vetor de territórios usando calloc.
-// Retorna um ponteiro para a memória alocada ou NULL em caso de falha.
+static void nivel_mestre(void){
+    Territorio *mapa = alocarMapa(QTDE_TERRITORIOS);
+    if(!mapa){ puts("Falha ao alocar memoria."); return; }
+    inicializarTerritorios(mapa, QTDE_TERRITORIOS);
 
-// inicializarTerritorios():
-// Preenche os dados iniciais de cada território no mapa (nome, cor do exército, número de tropas).
-// Esta função modifica o mapa passado por referência (ponteiro).
+    const char corJogador[]="Azul";
+    int missao=sortearMissao(), venceu=0, opc=0;
 
-// liberarMemoria():
-// Libera a memória previamente alocada para o mapa usando free.
+    do{
+        puts("\n================== WAR ESTRUTURADO ==================");
+        exibirMapa(mapa, QTDE_TERRITORIOS);
+        printf("Sua cor: %s\n", corJogador);
+        exibirMissao(missao);
+        exibirMenuPrincipal();
 
-// exibirMenuPrincipal():
-// Imprime na tela o menu de ações disponíveis para o jogador.
+        printf("Opcao: ");
+        if(scanf("%d",&opc)!=1){ limpa_stdin(); continue; }
+        limpa_stdin();
 
-// exibirMapa():
-// Mostra o estado atual de todos os territórios no mapa, formatado como uma tabela.
-// Usa 'const' para garantir que a função apenas leia os dados do mapa, sem modificá-los.
+        if(opc==1){
+            faseDeAtaque(mapa, QTDE_TERRITORIOS, corJogador);
+            venceu = verificarVitoria(mapa, QTDE_TERRITORIOS, missao, corJogador);
+            if(venceu) puts("\n>>> Missao concluida! Voce venceu!");
+        }else if(opc==2){
+            puts(verificarVitoria(mapa, QTDE_TERRITORIOS, missao, corJogador)
+                 ? "Missao cumprida." : "Missao ainda nao cumprida.");
+        }
+    }while(opc!=0 && !venceu);
 
-// exibirMissao():
-// Exibe a descrição da missão atual do jogador com base no ID da missão sorteada.
+    free(mapa);
+}
 
-// faseDeAtaque():
-// Gerencia a interface para a ação de ataque, solicitando ao jogador os territórios de origem e destino.
-// Chama a função simularAtaque() para executar a lógica da batalha.
+/* =========================================================
+ * MENU PRINCIPAL DOS 3 NÍVEIS
+ * ========================================================= */
+int main(void){
+    setlocale(LC_ALL, "");
+    srand((unsigned)time(NULL));
 
-// simularAtaque():
-// Executa a lógica de uma batalha entre dois territórios.
-// Realiza validações, rola os dados, compara os resultados e atualiza o número de tropas.
-// Se um território for conquistado, atualiza seu dono e move uma tropa.
+    for(;;){
+        puts("\n================= MENU GERAL =================");
+        puts("1 - Nivel Novato (cadastro e exibicao)");
+        puts("2 - Nivel Aventureiro (calloc + batalha)");
+        puts("3 - Nivel Mestre (missoes e vitoria)");
+        puts("0 - Sair");
+        printf("Opcao: ");
 
-// sortearMissao():
-// Sorteia e retorna um ID de missão aleatório para o jogador.
+        int op;
+        if(scanf("%d",&op)!=1){ limpa_stdin(); continue; }
+        limpa_stdin();
 
-// verificarVitoria():
-// Verifica se o jogador cumpriu os requisitos de sua missão atual.
-// Implementa a lógica para cada tipo de missão (destruir um exército ou conquistar um número de territórios).
-// Retorna 1 (verdadeiro) se a missão foi cumprida, e 0 (falso) caso contrário.
-
-// limparBufferEntrada():
-// Função utilitária para limpar o buffer de entrada do teclado (stdin), evitando problemas com leituras consecutivas de scanf e getchar.
+        if(op==0) break;
+        if(op==1) nivel_novato();
+        else if(op==2) nivel_aventureiro();
+        else if(op==3) nivel_mestre();
+        else puts("Opcao invalida.");
+    }
+    return 0;
+}
